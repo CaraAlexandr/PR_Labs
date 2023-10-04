@@ -44,7 +44,6 @@ def extract_product_details(content):
     }
 
 
-
 # Storing pages content and products
 pages_content = {}
 products = []

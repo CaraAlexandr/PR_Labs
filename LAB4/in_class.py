@@ -4,12 +4,14 @@ import re
 import json
 from jinja2 import Template
 
+
 class Product:
     def __init__(self, name, author, price, description):
         self.name = name
         self.author = author
         self.price = price
         self.description = description
+
 
 with open('products.json', 'r') as file:
     products_data = json.load(file)
@@ -56,10 +58,12 @@ product_template = Template("""
 <p>Description: {{ product.description }}</p>
 """)
 
+
 # Create a Cart class
 class CartItem:
     def __init__(self, product):
         self.product = product
+
 
 class Cart:
     def __init__(self):
@@ -79,6 +83,7 @@ class Cart:
 
 # Initialize the cart
 cart = Cart()
+
 
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -127,6 +132,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             self.wfile.write("404 Page not found".encode())
+
 
 with socketserver.TCPServer(("", 8081), MyHandler) as httpd:
     print("Server started on port 8081")
