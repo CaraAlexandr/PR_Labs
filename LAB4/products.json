@@ -1,0 +1,26 @@
+[
+    {
+        "name": "Adrian Minune - Best of Manele",
+        "author": "Adrian Minune",
+        "price": 50,
+        "description": "Best of Manele este o colectie de melodii de top din muzica manele interpretate de Adrian Minune."
+    },
+    {
+        "name": "Nicolae Guta - Manele de Dragoste",
+        "author": "Nicolae Guta",
+        "price": 45,
+        "description": "Manele de Dragoste este o colectie de manele romantice interpretate de Nicolae Guta."
+    },
+    {
+        "name": "Florin Salam - Manele Hituri",
+        "author": "Florin Salam",
+        "price": 55,
+        "description": "Manele Hituri este o colectie de hituri din muzica manele interpretate de Florin Salam."
+    },
+    {
+        "name": "Denisa - Manele de Suflet",
+        "author": "Denisa",
+        "price": 40,
+        "description": "Manele de Suflet este o colectie de melodii emotionale interpretate de Denisa."
+    }
+]

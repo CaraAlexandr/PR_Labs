@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 
-BASE_URL = 'https://999.md/ru/list/dating-and-greetings/i-need-a-man'
+BASE_URL = 'https://999.md/ru/list/audio-video-photo/headphones'
 
 
 def fetch_html(url):
