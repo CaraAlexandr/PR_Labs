@@ -6,12 +6,24 @@ import uuid
 import base64
 from datetime import datetime
 from colorama import init, Fore
-
-init(autoreset=True)
+import atexit
+import shutil
 
 CLIENT_MEDIA = f"CLIENT_MEDIA_{uuid.uuid4().hex}"
+exiting = False
+
 if not os.path.exists(CLIENT_MEDIA):
     os.mkdir(CLIENT_MEDIA)
+
+
+def cleanup():
+    if os.path.exists(CLIENT_MEDIA):
+        shutil.rmtree(CLIENT_MEDIA)
+
+
+atexit.register(cleanup)
+
+init(autoreset=True)
 
 
 def format_message(msg_type, payload):
@@ -51,19 +63,39 @@ def display_message(message_data):
 
 def receive_messages():
     while True:
-        message = client_socket.recv(1024).decode('utf-8')
-        if not message:
+        if exiting:
             break
         try:
-            message_data = json.loads(message)
-            display_message(message_data)
-        except json.JSONDecodeError:
-            print("Received invalid JSON data.")
+            # First, read the length of the message
+            length_data = client_socket.recv(10).strip()
+            if not length_data:
+                print("Server closed the connection.")
+                break
+            message_length = int(length_data)
+            chunks = []
+            bytes_received = 0
+            while bytes_received < message_length:
+                chunk = client_socket.recv(min(1024, message_length - bytes_received))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                bytes_received += len(chunk)
+            message = b''.join(chunks).decode('utf-8')
+            try:
+                message_data = json.loads(message)
+                display_message(message_data)
+            except json.JSONDecodeError:
+                print("Received invalid JSON data.")
+        except ValueError:
+            print("Received invalid message length from server.")
+        except ConnectionResetError:
+            print("Server closed the connection.")
+            break
 
 
 def send_messages():
     while True:
-        message_text = input(Fore.CYAN + "Enter a command (or 'exit' to quit): ")
+        message_text = input(Fore.CYAN + "Enter a command: ")
 
         if message_text.lower().startswith("upload:"):
             file_path = message_text.split(":", 1)[1].strip()
@@ -83,10 +115,12 @@ def send_messages():
             send_complete_message(client_socket, message)
 
         elif message_text.lower() == 'exit':
+            global exiting
+            exiting = True
             exit_message = format_message("exit", {"name": client_name, "room": room_name})
             send_complete_message(client_socket, exit_message)
-            client_socket.close()
             break
+
 
         else:
             message = format_message("message", {"sender": client_name, "room": room_name, "text": message_text})

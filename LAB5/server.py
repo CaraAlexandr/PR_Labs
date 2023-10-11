@@ -10,8 +10,15 @@ if not os.path.exists(SERVER_MEDIA):
 
 clients = []
 
+
 def format_message(msg_type, payload):
     return json.dumps({"type": msg_type, "payload": payload})
+
+
+def send_with_length(client_socket, message):
+    message_length = len(message)
+    client_socket.sendall(f"{message_length:<10}".encode('utf-8') + message.encode('utf-8'))
+
 
 def receive_complete_message(client_socket):
     chunks = []
@@ -22,14 +29,15 @@ def receive_complete_message(client_socket):
         chunks.append(chunk)
     return b''.join(chunks).decode('utf-8')
 
+
 def handle_client(client_socket, client_address):
     global clients
     print(f"Accepted connection from {client_address}")
     client_name = ""
     client_room = ""
 
-    while True:
-        try:
+    try:
+        while True:
             message_json = receive_complete_message(client_socket)
             if not message_json:
                 break
@@ -39,19 +47,21 @@ def handle_client(client_socket, client_address):
                 client_name = message_data["payload"]["name"]
                 client_room = message_data["payload"]["room"]
                 ack_message = format_message("connect_ack", {"message": "Connected to the room."})
-                client_socket.sendall((ack_message + '\n').encode('utf-8'))
+                send_with_length(client_socket, ack_message + '\n')
                 notification = format_message("notification", {"message": f"{client_name} has joined the room."})
                 for client in clients:
-                    client.sendall((notification + '\n').encode('utf-8'))
+                    if client in clients:
+                        send_with_length(client, notification + '\n')
 
             elif message_data["type"] == "exit":
                 client_name = message_data["payload"]["name"]
                 client_room = message_data["payload"]["room"]
-                ack_message = format_message("exit_ack", {"message": "Disconnected to the room."})
-                client_socket.sendall((ack_message + '\n').encode('utf-8'))
+                ack_message = format_message("exit_ack", {"message": "Disconnected from the room."})
+                send_with_length(client_socket, ack_message + '\n')
                 notification = format_message("notification", {"message": f"{client_name} has left the room."})
                 for client in clients:
-                    client.sendall((notification + '\n').encode('utf-8'))
+                    if client in clients:
+                        send_with_length(client, notification + '\n')
 
             elif message_data["type"] == "message":
                 broadcast_message = format_message("message", {
@@ -60,7 +70,8 @@ def handle_client(client_socket, client_address):
                     "text": message_data["payload"]["text"]
                 })
                 for client in clients:
-                    client.sendall((broadcast_message + '\n').encode('utf-8'))
+                    if client in clients:
+                        send_with_length(client, broadcast_message + '\n')
 
             elif message_data["type"] == "upload":
                 file_name = message_data["payload"]["file_name"]
@@ -72,7 +83,8 @@ def handle_client(client_socket, client_address):
                 print(f"File {file_name} saved to {file_path}")
                 notification = format_message("notification", {"message": f"User {client_name} uploaded the {file_name} file."})
                 for client in clients:
-                    client.sendall((notification + '\n').encode('utf-8'))
+                    if client in clients:
+                        send_with_length(client, notification + '\n')
 
             elif message_data["type"] == "download":
                 file_name = message_data["payload"]["file_name"]
@@ -82,16 +94,20 @@ def handle_client(client_socket, client_address):
                         file_content = f.read()
                     b64_encoded_content = base64.b64encode(file_content).decode('utf-8')
                     send_data = format_message("file", {"file_name": file_name, "content": b64_encoded_content})
-                    client_socket.sendall((send_data + '\n').encode('utf-8'))
+                    send_with_length(client_socket, send_data + '\n')
                 else:
                     error_message = format_message("error", {"message": f"The {file_name} doesn't exist."})
-                    client_socket.sendall((error_message + '\n').encode('utf-8'))
+                    send_with_length(client_socket, error_message + '\n')
 
-        except json.JSONDecodeError:
-            print(f"Received invalid JSON data from {client_address}. Continuing...")
+    except (ConnectionResetError, BrokenPipeError):
+        print(f"Connection lost with {client_address}. Closing connection.")
+    except json.JSONDecodeError:
+        print(f"Received invalid JSON data from {client_address}. Continuing...")
 
-    clients.remove(client_socket)
+    if client_socket in clients:
+        clients.remove(client_socket)
     client_socket.close()
+
 
 if __name__ == "__main__":
     HOST = '127.0.0.1'
