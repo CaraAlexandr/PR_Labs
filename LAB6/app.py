@@ -97,6 +97,33 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
+def create_scooter_table_if_not_exists():
+    """Create the scooter table if it does not exist."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Check if the scooter table exists
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'scooter'
+        );
+    """)
+    table_exists = cur.fetchone()[0]
+
+    # If the table doesn't exist, create it
+    if not table_exists:
+        cur.execute("""
+            CREATE TABLE scooter (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                battery_level INT NOT NULL
+            );
+        """)
+        conn.commit()
+
+    conn.close()
 
 if __name__ == '__main__':
+    create_scooter_table_if_not_exists()
     app.run(host='0.0.0.0', debug=True)
