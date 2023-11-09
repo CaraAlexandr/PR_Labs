@@ -1,22 +1,40 @@
 version: '3'
 
 services:
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+
   db:
     image: postgres:latest
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: adminpass
       POSTGRES_DB: scooters
-#    volumes:
-#      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-
-  web:
-    build:
-      context: ./LAB6
     ports:
-      - "5000:5000"
-    depends_on:
-      - db
+      - "5432:5432"
 
+  producer:
+    build:
+      context: ./LAB7
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    command: python ./producer.py
+    depends_on:
+      - rabbitmq
+
+  consumer:
+    build:
+      context: ./LAB7
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      POSTGRES_HOST: db
+      POSTGRES_DB: scooters
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpass
+    command: python ./consumer.py
+    depends_on:
+      - rabbitmq
+      - db

@@ -79,5 +79,5 @@ def extract_info(URL):
     return dict_result
 
 
-URL = "https://999.md/ro/84307033"
+URL = "https://999.md/ru/84361146"
 extract_info(URL)

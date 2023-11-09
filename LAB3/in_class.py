@@ -32,5 +32,5 @@ def recursive(maxIterations, currentIteration, URL_array, data):
         recursive(maxIterations, currentIteration + 1, URL_array, data)
 
 
-URL_array = ["https://999.md/ru/list/computers-and-office-equipment/game-consoles"]
+URL_array = ["https://999.md/ru/list/dating-and-greetings/i-need-a-man"]
 links = recursive(100000000, 0, URL_array, [])
