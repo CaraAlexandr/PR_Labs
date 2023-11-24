@@ -35,17 +35,17 @@ def heartbeat():
 @app.route('/accept_leader', methods=['POST'])
 def accept_leader():
     if raft_node.state == 'follower':
-        leader_info = request.json  # Extract leader's information
-        # Logic to store leader's information
+        leader_info = request.json
+        raft_node.receive_leader_credentials(leader_info)
         return jsonify({'status': 'accepted'}), 200
     else:
-        return jsonify({'error': 'Not a follower'}), 403
+        return jsonify({'error': 'Invalid state'}), 403
 
 @app.route('/send_credentials', methods=['POST'])
 def send_credentials():
     if raft_node.state == 'leader':
         follower_info = request.json
-        raft_node.update_follower_list(f"{follower_info['ip']}:{follower_info['port']}")
+        raft_node.handle_accept_message(follower_info)
         return jsonify({'status': 'credentials received'}), 200
     else:
         return jsonify({'error': 'Not the leader'}), 403
@@ -62,6 +62,14 @@ def announce_leader():
             return jsonify({'status': 'rejected'}), 200
     else:
         return jsonify({'status': 'rejected'}), 200
+
+@app.route('/request_vote', methods=['POST'])
+def request_vote():
+    data = request.json
+    candidate_id = data.get('candidate_id')
+    term = data.get('term')
+    vote_granted = raft_node.handle_vote_request(candidate_id, term)
+    return jsonify({'vote_granted': vote_granted}), 200 if vote_granted else 403
 
 @app.route('/scooters/', methods=['GET'])
 def list_scooters():
@@ -90,8 +98,9 @@ def create_scooter():
     new_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    # Forward the request to followers if this node is the leader
     if raft_node.state == 'leader':
-        raft_node.forward_request_to_followers('/scooters/', request.json, 'POST')  # Corrected line
+        raft_node.forward_request_to_followers('/scooters/', request.json, 'POST')
 
     return jsonify({'id': new_id, 'name': name, 'battery_level': battery_level}), 201
 
@@ -125,9 +134,10 @@ def update_scooter(id):
     conn.commit()
     conn.close()
 
-    # Forward request to followers
+    # Forward the request to followers if this node is the leader
     if raft_node.state == 'leader':
         raft_node.forward_request_to_followers(f'/scooters/{id}', request.json, 'PUT')
+
 
     return jsonify({'id': id, 'name': name, 'battery_level': battery_level})
 
@@ -150,9 +160,10 @@ def delete_scooter(id):
     conn.commit()
     conn.close()
 
-    # Forward request to followers
+    # Forward the request to followers if this node is the leader
     if raft_node.state == 'leader':
         raft_node.forward_request_to_followers(f'/scooters/{id}', {'id': id}, 'DELETE')
+
 
     return jsonify({"message": "Electro Scooter deleted successfully"}), 200
 
