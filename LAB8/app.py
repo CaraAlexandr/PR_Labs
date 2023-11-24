@@ -50,12 +50,25 @@ def send_credentials():
     else:
         return jsonify({'error': 'Not the leader'}), 403
 
+@app.route('/announce_leader', methods=['POST'])
+def announce_leader():
+    candidate_id = request.json.get('candidate_id')
+    if raft_node.state in ['follower', 'candidate']:
+        if raft_node.current_leader is None or raft_node.current_leader == candidate_id:
+            raft_node.current_leader = candidate_id
+            raft_node.state = 'follower'
+            return jsonify({'status': 'accepted'}), 200
+        else:
+            return jsonify({'status': 'rejected'}), 200
+    else:
+        return jsonify({'status': 'rejected'}), 200
 
 @app.route('/scooters/', methods=['GET'])
 def list_scooters():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, name, battery_level FROM scooter")
+    table_name = f"scooter_{node_id}"
+    cur.execute(f"SELECT id, name, battery_level FROM {table_name}")
     scooters = cur.fetchall()
     conn.close()
     return jsonify([{'id': s[0], 'name': s[1], 'battery_level': s[2]} for s in scooters])
@@ -72,12 +85,13 @@ def create_scooter():
     battery_level = request.json['battery_level']
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("INSERT INTO scooter (name, battery_level) VALUES (%s, %s) RETURNING id", (name, battery_level))
+    table_name = f"scooter_{node_id}"
+    cur.execute(f"INSERT INTO {table_name} (name, battery_level) VALUES (%s, %s) RETURNING id", (name, battery_level))
     new_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
     if raft_node.state == 'leader':
-        raft_node.forward_request_to_followers('/scooters/', request.json)
+        raft_node.forward_request_to_followers('/scooters/', request.json, 'POST')  # Corrected line
 
     return jsonify({'id': new_id, 'name': name, 'battery_level': battery_level}), 201
 
@@ -86,7 +100,8 @@ def create_scooter():
 def get_scooter(id):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, name, battery_level FROM scooter WHERE id = %s", (id,))
+    table_name = f"scooter_{node_id}"
+    cur.execute(f"SELECT id, name, battery_level FROM {table_name} WHERE id = %s", (id,))
     scooter = cur.fetchone()
     conn.close()
     if scooter is None:
@@ -105,23 +120,28 @@ def update_scooter(id):
     battery_level = request.json.get('battery_level')
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE scooter SET name = %s, battery_level = %s WHERE id = %s", (name, battery_level, id))
+    table_name = f"scooter_{node_id}"
+    cur.execute(f"UPDATE {table_name} SET name = %s, battery_level = %s WHERE id = %s", (name, battery_level, id))
     conn.commit()
     conn.close()
+
+    # Forward request to followers
+    if raft_node.state == 'leader':
+        raft_node.forward_request_to_followers(f'/scooters/{id}', request.json, 'PUT')
+
     return jsonify({'id': id, 'name': name, 'battery_level': battery_level})
+
 
 
 @app.route('/scooters/<int:id>', methods=['DELETE'])
 def delete_scooter(id):
     if raft_node.state != 'leader':
         return jsonify({'error': 'Not the leader'}), 403
-    password = request.headers.get('X-Delete-Password')
-    if password != 'your_secret_password':  # Replace with your actual password
-        return jsonify({"error": "Incorrect password"}), 401
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM scooter WHERE id = %s", (id,))
+    table_name = f"scooter_{node_id}"
+    cur.execute(f"DELETE FROM {table_name} WHERE id = %s", (id,))
 
     if cur.rowcount == 0:  # No rows were deleted, implying scooter was not found.
         conn.close()
@@ -129,7 +149,67 @@ def delete_scooter(id):
 
     conn.commit()
     conn.close()
+
+    # Forward request to followers
+    if raft_node.state == 'leader':
+        raft_node.forward_request_to_followers(f'/scooters/{id}', {'id': id}, 'DELETE')
+
     return jsonify({"message": "Electro Scooter deleted successfully"}), 200
+
+# Internal endpoint for creating a scooter
+@app.route('/internal/scooters/', methods=['POST'])
+def internal_create_scooter():
+    if raft_node.state == 'follower':
+        if not request.json or 'name' not in request.json or 'battery_level' not in request.json:
+            abort(400)
+        name = request.json['name']
+        battery_level = request.json['battery_level']
+        conn = get_db_connection()
+        cur = conn.cursor()
+        table_name = f"scooter_{node_id}"
+        cur.execute(f"INSERT INTO {table_name} (name, battery_level) VALUES (%s, %s) RETURNING id",
+                    (name, battery_level))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        conn.close()
+        if raft_node.state == 'leader':
+            raft_node.forward_request_to_followers('/scooters/', request.json, 'POST')  # Corrected line
+
+        return jsonify({'id': new_id, 'name': name, 'battery_level': battery_level}), 201
+
+# Internal endpoint for updating a scooter
+@app.route('/internal/scooters/<int:id>', methods=['PUT'])
+def internal_update_scooter(id):
+    if raft_node.state == 'follower':
+        if not request.json:
+            abort(400)
+        name = request.json.get('name')
+        battery_level = request.json.get('battery_level')
+        conn = get_db_connection()
+        cur = conn.cursor()
+        table_name = f"scooter_{node_id}"
+        cur.execute(f"UPDATE {table_name} SET name = %s, battery_level = %s WHERE id = %s", (name, battery_level, id))
+        conn.commit()
+        conn.close()
+        return jsonify({'id': id, 'name': name, 'battery_level': battery_level})
+
+
+# Internal endpoint for deleting a scooter
+@app.route('/internal/scooters/<int:id>', methods=['DELETE'])
+def internal_delete_scooter(id):
+    if raft_node.state == 'follower':
+        conn = get_db_connection()
+        cur = conn.cursor()
+        table_name = f"scooter_{node_id}"
+        cur.execute(f"DELETE FROM {table_name} WHERE id = %s", (id,))
+
+        if cur.rowcount == 0:  # No rows were deleted, implying scooter was not found.
+            conn.close()
+            return jsonify({"error": "Electro Scooter not found"}), 404
+
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Electro Scooter deleted successfully"}), 200
 
 
 # Swagger UI setup
@@ -151,20 +231,21 @@ def create_scooter_table_if_not_exists():
     """Create the scooter table if it does not exist."""
     conn = get_db_connection()
     cur = conn.cursor()
+    table_name = f"scooter_{node_id}"  # Dynamic table name
 
-    # Check if the scooter table exists
-    cur.execute("""
+    # Check if the scooter table exists for this node
+    cur.execute(f"""
         SELECT EXISTS (
             SELECT FROM information_schema.tables 
-            WHERE table_name = 'scooter'
+            WHERE table_name = %s
         );
-    """)
+    """, (table_name,))
     table_exists = cur.fetchone()[0]
 
     # If the table doesn't exist, create it
     if not table_exists:
-        cur.execute("""
-            CREATE TABLE scooter (
+        cur.execute(f"""
+            CREATE TABLE {table_name} (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 battery_level INT NOT NULL
@@ -173,7 +254,6 @@ def create_scooter_table_if_not_exists():
         conn.commit()
 
     conn.close()
-
 
 if __name__ == '__main__':
     create_scooter_table_if_not_exists()

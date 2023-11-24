@@ -27,7 +27,7 @@ services:
       context: ./LAB8
     environment:
       NODE_ID: app2
-      PEERS: "app2:5000,app3:5000"
+      PEERS: "app1:5000,app3:5000"
       EXTERNAL_PORT: "5002"
     ports:
       - "5002:5000"
@@ -39,7 +39,7 @@ services:
       context: ./LAB8
     environment:
       NODE_ID: app3
-      PEERS: "app2:5000,app3:5000"
+      PEERS: "app2:5000,app1:5000"
       EXTERNAL_PORT: "5003"
     ports:
       - "5003:5000"
